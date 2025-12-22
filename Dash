@@ -11,12 +11,12 @@ local playerGui = player:WaitForChild("PlayerGui")
 --==================================================
 -- CONFIG & STATE
 --==================================================
-local DASH_DISTANCE = 10
+local DASH_DISTANCE = 4 -- ปรับค่าเริ่มต้นเป็น 4 ตามคำขอ
 local DASH_TIME = 0.1
 local DASH_COOLDOWN = 0.05
 local dashReady = true
 
--- ค่าเริ่มต้น: แดช1 (ปกติ-เขียว), แดช2 (ปกติ-เขียว)
+-- ค่าสถานะการทะลุ (Noclip) แยกกัน
 local dash1Noclip = false 
 local dash2Noclip = false 
 
@@ -28,7 +28,8 @@ if gui then gui:Destroy() end
 
 gui = Instance.new("ScreenGui")
 gui.Name = "DashSystemGui"
-gui.ResetOnSpawn = false
+gui.ResetOnSpawn = false -- ตายไม่หาย
+gui.IgnoreGuiInset = true -- เพื่อให้ค่า Y = 0 คือบนสุดจริงๆ
 gui.Parent = playerGui
 
 local function createCorner(parent, radius)
@@ -67,11 +68,11 @@ closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
 createCorner(closeBtn, 13)
 
 --==================================================
--- OPEN MENU BUTTON (TOP)
+-- SHOW/HIDE SYSTEM (Open Menu ตำแหน่ง Y = 3)
 --==================================================
 local showFrame = Instance.new("Frame", gui)
 showFrame.Size = UDim2.new(0, 100, 0, 25)
-showFrame.Position = UDim2.new(0.5, -50, 0, 5)
+showFrame.Position = UDim2.new(0.5, -50, 0, 3) -- ปรับค่าเป็น 3 ตามคำขอ
 showFrame.BackgroundColor3 = Color3.fromRGB(0,0,0)
 showFrame.BackgroundTransparency = 0.5
 showFrame.Visible = false
@@ -109,7 +110,8 @@ local dashBtn2 = createDashBtn("Dash2", "แดช 2", UDim2.new(0.85, -75, 0.7,
 -- DASH CORE LOGIC
 --==================================================
 local function getHRP()
-	return player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local char = player.Character or player.CharacterAdded:Wait()
+	return char:WaitForChild("HumanoidRootPart", 5)
 end
 
 local function executeDash(dir, isNoclip)
@@ -147,7 +149,7 @@ dashBtn2.MouseButton1Click:Connect(function()
 end)
 
 --==================================================
--- SETTINGS OVERLAY (ปรับปรุงใหม่ตามสั่ง)
+-- SETTINGS OVERLAY
 --==================================================
 local overlay = Instance.new("Frame", gui)
 overlay.Size = UDim2.new(1,0,1,0)
@@ -161,14 +163,14 @@ setFrame.Position = UDim2.new(0.5, -120, 0.5, -100)
 setFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 createCorner(setFrame)
 
--- ฟังก์ชันสร้างปุ่ม Toggle ทะลุ
 local function createToggle(text, y, startState)
 	local btn = Instance.new("TextButton", setFrame)
 	btn.Size = UDim2.new(1, -40, 0, 35)
 	btn.Position = UDim2.new(0, 20, 0, y)
-	btn.Text = text .. (startState and " (ทะลุ)" or " (ไม่ทะลุ)")
+	btn.Text = text .. (startState and " ทะลุ" or " ไม่ทะลุ")
 	btn.BackgroundColor3 = startState and Color3.fromRGB(180, 50, 50) or Color3.fromRGB(50, 180, 50)
 	btn.TextColor3 = Color3.new(1,1,1)
+	btn.Font = Enum.Font.GothamBold
 	createCorner(btn)
 	return btn
 end
@@ -193,16 +195,15 @@ setOk.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 setOk.TextColor3 = Color3.new(1,1,1)
 createCorner(setOk)
 
--- Logic ของปุ่ม Toggle
 t1.MouseButton1Click:Connect(function()
 	dash1Noclip = not dash1Noclip
-	t1.Text = "แดช 1" .. (dash1Noclip and " (ทะลุ)" or " (ไม่ทะลุ)")
+	t1.Text = "แดช 1" .. (dash1Noclip and " ทะลุ" or " ไม่ทะลุ")
 	t1.BackgroundColor3 = dash1Noclip and Color3.fromRGB(180, 50, 50) or Color3.fromRGB(50, 180, 50)
 end)
 
 t2.MouseButton1Click:Connect(function()
 	dash2Noclip = not dash2Noclip
-	t2.Text = "แดช 2" .. (dash2Noclip and " (ทะลุ)" or " (ไม่ทะลุ)")
+	t2.Text = "แดช 2" .. (dash2Noclip and " ทะลุ" or " ไม่ทะลุ")
 	t2.BackgroundColor3 = dash2Noclip and Color3.fromRGB(180, 50, 50) or Color3.fromRGB(50, 180, 50)
 end)
 
@@ -245,7 +246,7 @@ closeBtn.MouseButton1Click:Connect(function() panel.Visible = false showFrame.Vi
 showBtn.MouseButton1Click:Connect(function() panel.Visible = true showFrame.Visible = false end)
 
 --==================================================
--- DRAG SYSTEM
+-- DRAG SYSTEM (Stable PC/Mobile)
 --==================================================
 local function makeDraggable(btn)
 	local dragging, dragStart, startPos
