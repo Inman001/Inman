@@ -1,0 +1,270 @@
+--==================================================
+-- SERVICES
+--==================================================
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--==================================================
+-- CONFIG & STATE
+--==================================================
+local DASH_DISTANCE = 10
+local DASH_TIME = 0.1
+local DASH_COOLDOWN = 0.05
+local dashReady = true
+
+-- ค่าเริ่มต้น: แดช1 (ปกติ-เขียว), แดช2 (ปกติ-เขียว)
+local dash1Noclip = false 
+local dash2Noclip = false 
+
+--==================================================
+-- GUI ROOT
+--==================================================
+local gui = playerGui:FindFirstChild("DashSystemGui")
+if gui then gui:Destroy() end
+
+gui = Instance.new("ScreenGui")
+gui.Name = "DashSystemGui"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local function createCorner(parent, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius or 8)
+	corner.Parent = parent
+end
+
+--==================================================
+-- MAIN PANEL
+--==================================================
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(0, 180, 0, 190)
+panel.Position = UDim2.new(0, 15, 0.5, -95)
+panel.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+panel.Active = true
+panel.Draggable = true
+panel.Parent = gui
+createCorner(panel, 10)
+
+local gearBtn = Instance.new("TextButton", panel)
+gearBtn.Size = UDim2.new(0, 26, 0, 26)
+gearBtn.Position = UDim2.new(0, 5, 0, 5)
+gearBtn.Text = "⚙"
+gearBtn.TextColor3 = Color3.new(1,1,1)
+gearBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+createCorner(gearBtn, 13)
+
+local closeBtn = Instance.new("TextButton", panel)
+closeBtn.Size = UDim2.new(0, 26, 0, 26)
+closeBtn.Position = UDim2.new(1, -31, 0, 5)
+closeBtn.Text = "×"
+closeBtn.TextScaled = true
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+createCorner(closeBtn, 13)
+
+--==================================================
+-- OPEN MENU BUTTON (TOP)
+--==================================================
+local showFrame = Instance.new("Frame", gui)
+showFrame.Size = UDim2.new(0, 100, 0, 25)
+showFrame.Position = UDim2.new(0.5, -50, 0, 5)
+showFrame.BackgroundColor3 = Color3.fromRGB(0,0,0)
+showFrame.BackgroundTransparency = 0.5
+showFrame.Visible = false
+createCorner(showFrame, 5)
+
+local showBtn = Instance.new("TextButton", showFrame)
+showBtn.Size = UDim2.new(1,0,1,0)
+showBtn.Text = "OPEN MENU"
+showBtn.TextSize = 12
+showBtn.TextColor3 = Color3.new(1,1,1)
+showBtn.BackgroundTransparency = 1
+
+--==================================================
+-- DASH BUTTONS
+--==================================================
+local function createDashBtn(name, text, pos, color)
+	local b = Instance.new("TextButton", gui)
+	b.Name = name
+	b.Size = UDim2.new(0, 65, 0, 65)
+	b.Position = pos
+	b.Text = text
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 16
+	b.TextColor3 = Color3.new(1,1,1)
+	b.BackgroundColor3 = color
+	b.Visible = false
+	createCorner(b, 33)
+	return b
+end
+
+local dashBtn = createDashBtn("Dash1", "แดช 1", UDim2.new(0.85, 0, 0.7, 0), Color3.fromRGB(60, 60, 60))
+local dashBtn2 = createDashBtn("Dash2", "แดช 2", UDim2.new(0.85, -75, 0.7, 0), Color3.fromRGB(80, 80, 110))
+
+--==================================================
+-- DASH CORE LOGIC
+--==================================================
+local function getHRP()
+	return player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function executeDash(dir, isNoclip)
+	local hrp = getHRP()
+	if not hrp or not dashReady then return end
+	dashReady = false
+	
+	local targetDist = DASH_DISTANCE
+	
+	if not isNoclip then
+		local params = RaycastParams.new()
+		params.FilterDescendantsInstances = {player.Character}
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		local res = workspace:Raycast(hrp.Position, dir * DASH_DISTANCE, params)
+		if res then
+			targetDist = (res.Position - hrp.Position).Magnitude - 1.5
+		end
+	end
+	
+	if targetDist < 0 then targetDist = 0 end
+	TweenService:Create(hrp, TweenInfo.new(DASH_TIME), {CFrame = hrp.CFrame + (dir * targetDist)}):Play()
+	
+	task.wait(DASH_TIME + DASH_COOLDOWN)
+	dashReady = true
+end
+
+dashBtn.MouseButton1Click:Connect(function()
+	local hrp = getHRP()
+	if hrp then executeDash(hrp.CFrame.LookVector, dash1Noclip) end
+end)
+
+dashBtn2.MouseButton1Click:Connect(function()
+	local hrp = getHRP()
+	if hrp then executeDash(-hrp.CFrame.LookVector, dash2Noclip) end
+end)
+
+--==================================================
+-- SETTINGS OVERLAY (ปรับปรุงใหม่ตามสั่ง)
+--==================================================
+local overlay = Instance.new("Frame", gui)
+overlay.Size = UDim2.new(1,0,1,0)
+overlay.BackgroundColor3 = Color3.new(0,0,0)
+overlay.BackgroundTransparency = 0.6
+overlay.Visible = false
+
+local setFrame = Instance.new("Frame", overlay)
+setFrame.Size = UDim2.new(0, 240, 0, 200)
+setFrame.Position = UDim2.new(0.5, -120, 0.5, -100)
+setFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+createCorner(setFrame)
+
+-- ฟังก์ชันสร้างปุ่ม Toggle ทะลุ
+local function createToggle(text, y, startState)
+	local btn = Instance.new("TextButton", setFrame)
+	btn.Size = UDim2.new(1, -40, 0, 35)
+	btn.Position = UDim2.new(0, 20, 0, y)
+	btn.Text = text .. (startState and " (ทะลุ)" or " (ไม่ทะลุ)")
+	btn.BackgroundColor3 = startState and Color3.fromRGB(180, 50, 50) or Color3.fromRGB(50, 180, 50)
+	btn.TextColor3 = Color3.new(1,1,1)
+	createCorner(btn)
+	return btn
+end
+
+local t1 = createToggle("แดช 1", 20, dash1Noclip)
+local t2 = createToggle("แดช 2", 65, dash2Noclip)
+
+local setInput = Instance.new("TextBox", setFrame)
+setInput.Size = UDim2.new(1, -40, 0, 35)
+setInput.Position = UDim2.new(0, 20, 0, 110)
+setInput.Text = tostring(DASH_DISTANCE)
+setInput.PlaceholderText = "ระยะแดช..."
+setInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+setInput.TextColor3 = Color3.new(1,1,1)
+createCorner(setInput)
+
+local setOk = Instance.new("TextButton", setFrame)
+setOk.Size = UDim2.new(1, -40, 0, 35)
+setOk.Position = UDim2.new(0, 20, 1, -45)
+setOk.Text = "ตกลง"
+setOk.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+setOk.TextColor3 = Color3.new(1,1,1)
+createCorner(setOk)
+
+-- Logic ของปุ่ม Toggle
+t1.MouseButton1Click:Connect(function()
+	dash1Noclip = not dash1Noclip
+	t1.Text = "แดช 1" .. (dash1Noclip and " (ทะลุ)" or " (ไม่ทะลุ)")
+	t1.BackgroundColor3 = dash1Noclip and Color3.fromRGB(180, 50, 50) or Color3.fromRGB(50, 180, 50)
+end)
+
+t2.MouseButton1Click:Connect(function()
+	dash2Noclip = not dash2Noclip
+	t2.Text = "แดช 2" .. (dash2Noclip and " (ทะลุ)" or " (ไม่ทะลุ)")
+	t2.BackgroundColor3 = dash2Noclip and Color3.fromRGB(180, 50, 50) or Color3.fromRGB(50, 180, 50)
+end)
+
+gearBtn.MouseButton1Click:Connect(function() overlay.Visible = true end)
+setOk.MouseButton1Click:Connect(function()
+	DASH_DISTANCE = tonumber(setInput.Text) or DASH_DISTANCE
+	overlay.Visible = false
+end)
+
+--==================================================
+-- MAIN PANEL LOGIC
+--==================================================
+local function panelButton(text, y)
+	local b = Instance.new("TextButton", panel)
+	b.Size = UDim2.new(1, -20, 0, 35)
+	b.Position = UDim2.new(0, 10, 0, y)
+	b.Text = text
+	b.TextColor3 = Color3.new(1,1,1)
+	b.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	createCorner(b, 6)
+	return b
+end
+
+local dashToggle = panelButton("ปุ่มแดช 1", 45)
+local lockBtn = panelButton("ล็อคปุ่ม (ON)", 90)
+local dash2Toggle = panelButton("ปุ่มแดช 2", 135)
+
+local isLocked = true
+lockBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+
+lockBtn.MouseButton1Click:Connect(function()
+	isLocked = not isLocked
+	lockBtn.Text = isLocked and "ล็อคปุ่ม (ON)" or "ล็อคปุ่ม (OFF)"
+	lockBtn.BackgroundColor3 = isLocked and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
+end)
+
+dashToggle.MouseButton1Click:Connect(function() dashBtn.Visible = not dashBtn.Visible end)
+dash2Toggle.MouseButton1Click:Connect(function() dashBtn2.Visible = not dashBtn2.Visible end)
+closeBtn.MouseButton1Click:Connect(function() panel.Visible = false showFrame.Visible = true end)
+showBtn.MouseButton1Click:Connect(function() panel.Visible = true showFrame.Visible = false end)
+
+--==================================================
+-- DRAG SYSTEM
+--==================================================
+local function makeDraggable(btn)
+	local dragging, dragStart, startPos
+	btn.InputBegan:Connect(function(input)
+		if isLocked then return end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = btn.Position
+			input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+		end
+	end)
+	UIS.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+makeDraggable(dashBtn)
+makeDraggable(dashBtn2)
