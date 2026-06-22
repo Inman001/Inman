@@ -1,0 +1,392 @@
+--// Private Mobile ESP Master UI (Aimbot Removed)
+--// Version: Clean ESP-Only + Modern HP Bar
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local UI_NAME = "PrivateESPOnlyUI_Mobile"
+local RENDER_NAME = "ESPUpdateLoop_Mobile"
+
+--// 1. ระบบลบสคริปต์เก่า
+local OldUI = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild(UI_NAME)
+if OldUI then
+    OldUI:Destroy()
+end
+pcall(function() RunService:UnbindFromRenderStep(RENDER_NAME) end)
+print("[System] โหลดระบบ ESP (Modern HP) สำเร็จ!")
+
+--// Settings (ESP)
+local ESP_Normal = false
+local ESP_Highlight = false
+local ESP_Dot = false
+local ESP_Health = false
+local Dot_OffsetX = 0
+local Dot_OffsetY = 0
+local Dot_Size = 4
+
+--// UI Setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = UI_NAME
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+--// ESP Dot (จุดกลางจอ)
+local CenterDot = Instance.new("Frame")
+CenterDot.Name = "CenterDotUI"
+CenterDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+CenterDot.Size = UDim2.fromOffset(Dot_Size, Dot_Size)
+CenterDot.AnchorPoint = Vector2.new(0.5, 0.5)
+CenterDot.Visible = false
+CenterDot.ZIndex = 100
+CenterDot.Parent = ScreenGui
+local DotCorner = Instance.new("UICorner", CenterDot)
+DotCorner.CornerRadius = UDim.new(1, 0)
+
+--// ==========================================
+--// [1] MAIN WINDOW (หน้าต่างหลัก รวม ESP)
+--// ==========================================
+local Window = Instance.new("Frame")
+Window.Name = "ESPMainWindow"
+Window.Size = UDim2.fromOffset(250, 240)
+Window.Position = UDim2.fromOffset(250, 100) 
+Window.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Window.Active = true
+Window.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner", Window)
+UICorner.CornerRadius = UDim.new(0, 10)
+local UIStroke = Instance.new("UIStroke", Window)
+UIStroke.Thickness = 1.5
+UIStroke.Color = Color3.fromRGB(60, 60, 60)
+
+local TitleLabel = Instance.new("TextLabel", Window)
+TitleLabel.Size = UDim2.new(1, -40, 0, 25)
+TitleLabel.Position = UDim2.new(0, 10, 0, 2)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "ESP Master Only"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.TextSize = 16
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton", Window)
+CloseBtn.Size = UDim2.new(0, 25, 0, 25)
+CloseBtn.Position = UDim2.new(1, -30, 0, 2)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "❌"
+CloseBtn.TextSize = 12
+
+--// สร้างปุ่มในหน้าต่างหลัก
+local function createESPToggle(text, yPos)
+    local btn = Instance.new("TextButton", Window)
+    btn.Size = UDim2.new(1, -20, 0, 28)
+    btn.Position = UDim2.new(0, 10, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(130, 130, 130)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 13
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
+end
+
+local Btn1_ESP = createESPToggle("ESP ตามสีทีม (OFF)", 35)
+local Btn2_Highlight = createESPToggle("เล็งแล้วไฮไลท์ม่วงเข้ม (OFF)", 68)
+local Btn3_Dot = createESPToggle("เปิด/ปิด จุดเล็ง (OFF)", 101)
+local Btn5_Health = createESPToggle("หลอดเลือด HP ข้างตัว (OFF)", 134)
+
+--// แผงปรับขนาดและตำแหน่งจุดเล็ง
+local SplitFrame = Instance.new("Frame", Window)
+SplitFrame.Size = UDim2.new(1, -20, 0, 48)
+SplitFrame.Position = UDim2.new(0, 10, 0, 172)
+SplitFrame.BackgroundTransparency = 1
+
+local LeftBox = Instance.new("Frame", SplitFrame)
+LeftBox.Size = UDim2.new(0.5, -4, 1, 0)
+LeftBox.BackgroundTransparency = 1
+
+local XInput = Instance.new("TextBox", LeftBox)
+XInput.Size = UDim2.new(1, 0, 0.5, -2)
+XInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+XInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+XInput.Text = "แกน X: 0"
+XInput.Font = Enum.Font.SourceSansBold
+XInput.TextSize = 12
+Instance.new("UICorner", XInput).CornerRadius = UDim.new(0, 4)
+
+local YInput = Instance.new("TextBox", LeftBox)
+YInput.Size = UDim2.new(1, 0, 0.5, -2)
+YInput.Position = UDim2.new(0, 0, 0.5, 2)
+YInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+YInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+YInput.Text = "แกน Y: 0"
+YInput.Font = Enum.Font.SourceSansBold
+YInput.TextSize = 12
+Instance.new("UICorner", YInput).CornerRadius = UDim.new(0, 4)
+
+local RightBox = Instance.new("Frame", SplitFrame)
+RightBox.Size = UDim2.new(0.5, -4, 1, 0)
+RightBox.Position = UDim2.new(0.5, 8, 0, 0)
+RightBox.BackgroundTransparency = 1
+
+local SizeInput = Instance.new("TextBox", RightBox)
+SizeInput.Size = UDim2.new(1, 0, 1, 0)
+SizeInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+SizeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+SizeInput.Text = "ขนาดจุด: 4"
+SizeInput.Font = Enum.Font.SourceSansBold
+SizeInput.TextSize = 13
+Instance.new("UICorner", SizeInput).CornerRadius = UDim.new(0, 4)
+
+--// Logic UI
+Btn1_ESP.MouseButton1Click:Connect(function()
+    ESP_Normal = not ESP_Normal
+    Btn1_ESP.BackgroundColor3 = ESP_Normal and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(130, 130, 130)
+    Btn1_ESP.Text = ESP_Normal and "ESP ตามสีทีม (ON)" or "ESP ตามสีทีม (OFF)"
+end)
+
+Btn2_Highlight.MouseButton1Click:Connect(function()
+    ESP_Highlight = not ESP_Highlight
+    Btn2_Highlight.BackgroundColor3 = ESP_Highlight and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(130, 130, 130)
+    Btn2_Highlight.Text = ESP_Highlight and "เล็งแล้วไฮไลท์ม่วงเข้ม (ON)" or "เล็งแล้วไฮไลท์ม่วงเข้ม (OFF)"
+end)
+
+Btn3_Dot.MouseButton1Click:Connect(function()
+    ESP_Dot = not ESP_Dot
+    Btn3_Dot.BackgroundColor3 = ESP_Dot and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(130, 130, 130)
+    Btn3_Dot.Text = ESP_Dot and "เปิด/ปิด จุดเล็ง (ON)" or "เปิด/ปิด จุดเล็ง (OFF)"
+end)
+
+Btn5_Health.MouseButton1Click:Connect(function()
+    ESP_Health = not ESP_Health
+    Btn5_Health.BackgroundColor3 = ESP_Health and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(130, 130, 130)
+    Btn5_Health.Text = ESP_Health and "หลอดเลือด HP ข้างตัว (ON)" or "หลอดเลือด HP ข้างตัว (OFF)"
+end)
+
+XInput.FocusLost:Connect(function()
+    local val = tonumber(XInput.Text:match("%-?%d+")) or 0
+    Dot_OffsetX = val
+    XInput.Text = "แกน X: " .. val
+end)
+
+YInput.FocusLost:Connect(function()
+    local val = tonumber(YInput.Text:match("%-?%d+")) or 0
+    Dot_OffsetY = val
+    YInput.Text = "แกน Y: " .. val
+end)
+
+SizeInput.FocusLost:Connect(function()
+    local val = tonumber(SizeInput.Text:match("%d+")) or 4
+    if val > 100 then val = 100 end
+    if val < 0 then val = 0 end
+    Dot_Size = val
+    SizeInput.Text = "ขนาดจุด: " .. val
+end)
+
+--// ปุ่มย่อหน้าต่าง (ไอต้าวะ)
+local OpenBtn = Instance.new("TextButton", ScreenGui)
+OpenBtn.Size = UDim2.fromOffset(130, 22) 
+OpenBtn.Position = UDim2.new(1, -250, 0, 8) 
+OpenBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+OpenBtn.BackgroundTransparency = 0.6 
+OpenBtn.Font = Enum.Font.SourceSansBold
+OpenBtn.Text = "อยากเปิดหน้าไอต้าวะ"
+OpenBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+OpenBtn.TextSize = 12 
+OpenBtn.Visible = false
+Instance.new("UICorner", OpenBtn).CornerRadius = UDim.new(0, 6)
+
+CloseBtn.MouseButton1Click:Connect(function() Window.Visible = false; OpenBtn.Visible = true end)
+OpenBtn.MouseButton1Click:Connect(function() Window.Visible = true; OpenBtn.Visible = false end)
+
+--// ลากหน้าต่างหลักได้
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = frame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+makeDraggable(Window)
+
+--// ==========================================
+--// [CORE UPDATE] ระบบ ESP Only
+--// ==========================================
+local HighlightCache = {}
+local HealthBarCache = {}
+
+local function ManageESP()
+    -- 1. อัปเดตจุดเล็ง
+    if ESP_Dot then
+        CenterDot.Visible = true
+        CenterDot.Size = UDim2.fromOffset(Dot_Size, Dot_Size)
+        CenterDot.Position = UDim2.fromOffset((Camera.ViewportSize.X / 2) + Dot_OffsetX, (Camera.ViewportSize.Y / 2) + Dot_OffsetY)
+    else
+        CenterDot.Visible = false
+    end
+
+    -- 2. ยิง Raycast ตรวจหาผู้เล่นเพื่อทำ Highlight
+    local hoveredCharacter = nil
+    if ESP_Highlight and ESP_Dot then
+        local dotX = (Camera.ViewportSize.X / 2) + Dot_OffsetX
+        local dotY = (Camera.ViewportSize.Y / 2) + Dot_OffsetY
+        local ray = Camera:ViewportPointToRay(dotX, dotY)
+        
+        local params = RaycastParams.new()
+        params.FilterDescendantsInstances = {LocalPlayer.Character, ScreenGui}
+        params.FilterType = Enum.RaycastFilterType.Exclude
+
+        local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, params)
+        if result and result.Instance then
+            local model = result.Instance:FindFirstAncestorOfClass("Model")
+            if model and Players:GetPlayerFromCharacter(model) and model:FindFirstChild("Humanoid") and model.Humanoid.Health > 0 then
+                hoveredCharacter = model
+            end
+        end
+    end
+
+    -- 3. อัปเดตระบบสแกนผู้เล่น
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local char = p.Character
+            if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") and char.Humanoid.Health > 0 then
+                
+                -- ====== จัดการ ESP เส้นกรอบ / สีทีม ======
+                local isHovered = (char == hoveredCharacter)
+                if ESP_Normal or (isHovered and ESP_Highlight) then
+                    local hl = HighlightCache[char]
+                    if not hl then
+                        hl = Instance.new("Highlight")
+                        hl.Parent = ScreenGui
+                        HighlightCache[char] = hl
+                    end
+                    hl.Adornee = char
+                    
+                    if isHovered then
+                        hl.FillColor = Color3.fromRGB(90, 0, 140)
+                        hl.OutlineColor = Color3.fromRGB(180, 50, 255)
+                        hl.FillTransparency = 0.35
+                        hl.OutlineTransparency = 0
+                    else
+                        local teamColor = p.Team and p.TeamColor.Color or Color3.fromRGB(255, 255, 255)
+                        hl.FillColor = teamColor
+                        hl.OutlineColor = teamColor
+                        hl.FillTransparency = 0.6
+                        hl.OutlineTransparency = 0.2
+                    end
+                else
+                    if HighlightCache[char] then
+                        HighlightCache[char]:Destroy()
+                        HighlightCache[char] = nil
+                    end
+                end
+
+                -- ====== จัดการ ESP หลอดเลือด HP (อัปเกรดดีไซน์) ======
+                if ESP_Health then
+                    local hb = HealthBarCache[char]
+                    if not hb then
+                        hb = Instance.new("BillboardGui")
+                        hb.Name = "PlayerHealthBar_Modern"
+                        hb.AlwaysOnTop = true
+                        
+                        -- [แก้บัคหลอดอ้วน]: ใช้ Scale (Studs) แทน Offset (พิกเซล) 
+                        -- กว้าง 0.35 Studs, สูง 5.2 Studs ทำให้เล็กลงตามระยะทางเป๊ะๆ
+                        hb.Size = UDim2.new(0.35, 0, 5.2, 0)
+                        hb.StudsOffset = Vector3.new(2.5, 0, 0) 
+                        hb.Adornee = char:FindFirstChild("HumanoidRootPart")
+                        hb.Parent = ScreenGui
+
+                        -- พื้นหลังหลอดเลือด
+                        local bgFrame = Instance.new("Frame", hb)
+                        bgFrame.Name = "Background"
+                        bgFrame.Size = UDim2.new(1, 0, 1, 0)
+                        bgFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+                        bgFrame.BackgroundTransparency = 0.5
+                        bgFrame.BorderSizePixel = 0
+                        
+                        -- [Modern UI]: ทำขอบโค้งมนแบบแคปซูล
+                        local bgCorner = Instance.new("UICorner", bgFrame)
+                        bgCorner.CornerRadius = UDim.new(1, 0)
+                        
+                        -- [Modern UI]: ใส่เส้นขอบสีดำให้หลอดดูมีมิติ
+                        local bgStroke = Instance.new("UIStroke", bgFrame)
+                        bgStroke.Thickness = 1.2
+                        bgStroke.Color = Color3.fromRGB(0, 0, 0)
+                        bgStroke.Transparency = 0.2
+
+                        -- หลอดเลือดด้านใน (ตัวที่วิ่งขึ้นลง)
+                        local fillFrame = Instance.new("Frame", bgFrame)
+                        fillFrame.Name = "Fill"
+                        fillFrame.AnchorPoint = Vector2.new(0, 1) 
+                        fillFrame.Position = UDim2.new(0, 0, 1, 0)
+                        fillFrame.BorderSizePixel = 0
+                        
+                        -- [Modern UI]: ขอบโค้งมนของหลอดด้านใน
+                        local fillCorner = Instance.new("UICorner", fillFrame)
+                        fillCorner.CornerRadius = UDim.new(1, 0)
+                        
+                        HealthBarCache[char] = hb
+                    end
+
+                    local hum = char.Humanoid
+                    local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                    local fill = hb.Background.Fill
+                    
+                    fill.Size = UDim2.new(1, 0, pct, 0)
+
+                    -- [Modern UI]: ปรับโทนสีให้เป็นแบบ Flat Design ดูสะอาดตาขึ้น
+                    if pct > 0.7 then
+                        fill.BackgroundColor3 = Color3.fromRGB(46, 204, 113) -- เขียวพาสเทล
+                    elseif pct > 0.4 then
+                        fill.BackgroundColor3 = Color3.fromRGB(241, 196, 15) -- เหลืองส้ม
+                    elseif pct > 0.2 then
+                        fill.BackgroundColor3 = Color3.fromRGB(230, 126, 34) -- ส้ม
+                    else
+                        fill.BackgroundColor3 = Color3.fromRGB(231, 76, 60) -- แดง
+                    end
+                else
+                    if HealthBarCache[char] then
+                        HealthBarCache[char]:Destroy()
+                        HealthBarCache[char] = nil
+                    end
+                end
+
+            else
+                if HighlightCache[char] then HighlightCache[char]:Destroy(); HighlightCache[char] = nil end
+                if HealthBarCache[char] then HealthBarCache[char]:Destroy(); HealthBarCache[char] = nil end
+            end
+        end
+    end
+    
+    for char, hl in pairs(HighlightCache) do
+        if not char or not char.Parent then if hl then hl:Destroy() end; HighlightCache[char] = nil end
+    end
+    for char, hb in pairs(HealthBarCache) do
+        if not char or not char.Parent then if hb then hb:Destroy() end; HealthBarCache[char] = nil end
+    end
+end
+
+--// Main Render Loop
+RunService:BindToRenderStep(RENDER_NAME, Enum.RenderPriority.Camera.Value + 1, function()
+    if not ScreenGui or not ScreenGui.Parent then RunService:UnbindFromRenderStep(RENDER_NAME) return end
+    Camera = workspace.CurrentCamera
+    
+    -- ทำงานเฉพาะระบบ ESP เท่านั้น
+    ManageESP()
+end)
