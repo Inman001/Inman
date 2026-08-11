@@ -73,7 +73,7 @@ OpenBtn.Position = UDim2.new(1, -390, 0, 8)
 OpenBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 OpenBtn.BackgroundTransparency = 0.6
 OpenBtn.Font = Enum.Font.GothamBold
-OpenBtn.Text = "ต้าสุดปอด"
+OpenBtn.Text = "เสี่ยแป้งดิวะ"
 OpenBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
 OpenBtn.TextSize = 12
 OpenBtn.Visible = false
@@ -132,4 +132,393 @@ end
 
 local function makeTextBox(parent, posY, defaultText, placeholder)
     local box = Instance.new("TextBox", parent)
-    box.Size = UDim2.new(1, 
+    box.Size = UDim2.new(1, -20, 0, 32)
+    box.Position = UDim2.new(0, 10, 0, posY)
+    box.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    box.Text = defaultText
+    box.PlaceholderText = placeholder
+    box.TextColor3 = Color3.fromRGB(255, 255, 255)
+    box.Font = Enum.Font.GothamBold
+    box.TextSize = 13
+    box.ClearTextOnFocus = false
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 5)
+    local s = Instance.new("UIStroke", box)
+    s.Color = Color3.fromRGB(100, 100, 100)
+    s.Thickness = 1
+    return box
+end
+
+--// ==========================================
+--// [5] PAGE 1
+--// ==========================================
+local Page1 = Instance.new("Frame", Window)
+Page1.Size = UDim2.new(1, 0, 1, -50)
+Page1.Position = UDim2.new(0, 0, 0, 48)
+Page1.BackgroundTransparency = 1
+
+local Btn1_ToggleUI     = makeBtn(Page1, 0,   Color3.fromRGB(200,50,50), "1. หน้าจอเรดาร์ [OFF]")
+local Btn2_ToggleSystem = makeBtn(Page1, 40,  Color3.fromRGB(200,50,50), "2. ระบบตรวจจับ (200) [OFF]")
+local Btn3_LockRadar    = makeBtn(Page1, 80,  Color3.fromRGB(200,50,50), "3. ล็อคจอเรดาร์ [OFF]")
+local Btn4_RangeInput   = makeTextBox(Page1, 120, "200", "ระยะเรดาร์ (10-100000)")
+local Btn4b_AlertRange  = makeTextBox(Page1, 162, "30", "ระยะแจ้งเตือน (1-1000)")
+
+local NextBtn = makeBtn(Page1, 204, Color3.fromRGB(50,80,160), "หน้าถัดไป 👉")
+
+--// ==========================================
+--// [6] PAGE 2
+--// ==========================================
+local Page2 = Instance.new("Frame", Window)
+Page2.Size = UDim2.new(1, 0, 1, -50)
+Page2.Position = UDim2.new(0, 0, 0, 48)
+Page2.BackgroundTransparency = 1
+Page2.Visible = false
+
+local Btn5_ShowName     = makeBtn(Page2, 0,   Color3.fromRGB(200,50,50), "1. แสดงชื่อ [OFF]")
+local Btn6_ShowDist     = makeBtn(Page2, 40,  Color3.fromRGB(200,50,50), "2. แสดงระยะห่าง [OFF]")
+local Btn7_Alert        = makeBtn(Page2, 80,  Color3.fromRGB(200,50,50), "3. แจ้งเตือนคนใกล้ [OFF]")
+local Btn9_FriendOnly   = makeBtn(Page2, 120, Color3.fromRGB(200,50,50), "4. แสดงเฉพาะเพื่อน [OFF]")
+local Btn10_AlertEnemy  = makeBtn(Page2, 160, Color3.fromRGB(200,50,50), "5. แจ้งเฉพาะต่างทีม [OFF]")
+
+local PrevBtn = makeBtn(Page2, 204, Color3.fromRGB(50,80,160), "👈 หน้าก่อนหน้า")
+
+--// ==========================================
+--// [7] แจ้งเตือน UI
+--// ==========================================
+local AlertLabel = Instance.new("TextLabel", ScreenGui)
+AlertLabel.Size = UDim2.fromOffset(260, 35)
+AlertLabel.AnchorPoint = Vector2.new(0.5, 0)
+AlertLabel.Position = UDim2.new(0.5, 0, 0, 50)
+AlertLabel.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+AlertLabel.BackgroundTransparency = 0.2
+AlertLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+AlertLabel.Font = Enum.Font.GothamBold
+AlertLabel.TextSize = 13
+AlertLabel.Text = ""
+AlertLabel.Visible = false
+AlertLabel.ZIndex = 20
+Instance.new("UICorner", AlertLabel).CornerRadius = UDim.new(0, 8)
+
+local AlertSound = Instance.new("Sound", SoundService)
+AlertSound.SoundId = "rbxassetid://131961136"
+AlertSound.Volume = 0.5
+
+--// ==========================================
+--// [8] LOGIC
+--// ==========================================
+local isRadarUI_On     = false
+local isRadarSystem_On = false
+local isRadarLocked    = false
+local showName         = false
+local showDist         = false
+local alertEnabled     = false
+local friendOnly       = false
+local alertEnemyOnly   = false
+local radarRadius      = 200
+local alertRange       = 30
+local blips            = {}
+local friendCache      = {}
+local alertCooldown    = 0
+local lastUpdate       = 0
+local UPDATE_RATE      = 0.033
+
+local function toggle(btn, state, textOn, textOff)
+    btn.BackgroundColor3 = state and Color3.fromRGB(50,200,50) or Color3.fromRGB(200,50,50)
+    btn.Text = state and textOn or textOff
+end
+
+-- สลับหน้า
+NextBtn.MouseButton1Click:Connect(function()
+    Page1.Visible = false
+    Page2.Visible = true
+    PageLabel.Text = "หน้า 2 / 2"
+end)
+PrevBtn.MouseButton1Click:Connect(function()
+    Page1.Visible = true
+    Page2.Visible = false
+    PageLabel.Text = "หน้า 1 / 2"
+end)
+
+-- หน้า 1
+Btn1_ToggleUI.MouseButton1Click:Connect(function()
+    isRadarUI_On = not isRadarUI_On
+    RadarScreen.Visible = isRadarUI_On
+    toggle(Btn1_ToggleUI, isRadarUI_On, "1. หน้าจอเรดาร์ [ON]", "1. หน้าจอเรดาร์ [OFF]")
+end)
+
+Btn2_ToggleSystem.MouseButton1Click:Connect(function()
+    isRadarSystem_On = not isRadarSystem_On
+    toggle(Btn2_ToggleSystem, isRadarSystem_On,
+        "2. ระบบตรวจจับ ("..radarRadius..") [ON]",
+        "2. ระบบตรวจจับ ("..radarRadius..") [OFF]")
+    if not isRadarSystem_On then
+        for _, d in pairs(blips) do d.frame:Destroy() end
+        table.clear(blips)
+    end
+end)
+
+Btn3_LockRadar.MouseButton1Click:Connect(function()
+    isRadarLocked = not isRadarLocked
+    toggle(Btn3_LockRadar, isRadarLocked, "3. ล็อคจอเรดาร์ [ON]", "3. ล็อคจอเรดาร์ [OFF]")
+    RadarScreen.Active = not isRadarLocked
+end)
+
+Btn4_RangeInput.FocusLost:Connect(function()
+    local num = tonumber(Btn4_RangeInput.Text)
+    if num then radarRadius = math.clamp(math.floor(num), 10, 100000) end
+    Btn4_RangeInput.Text = tostring(radarRadius)
+    local s = isRadarSystem_On
+    toggle(Btn2_ToggleSystem, s,
+        "2. ระบบตรวจจับ ("..radarRadius..") [ON]",
+        "2. ระบบตรวจจับ ("..radarRadius..") [OFF]")
+end)
+
+-- หน้า 2
+Btn5_ShowName.MouseButton1Click:Connect(function()
+    showName = not showName
+    toggle(Btn5_ShowName, showName, "1. แสดงชื่อ [ON]", "1. แสดงชื่อ [OFF]")
+end)
+
+Btn6_ShowDist.MouseButton1Click:Connect(function()
+    showDist = not showDist
+    toggle(Btn6_ShowDist, showDist, "2. แสดงระยะห่าง [ON]", "2. แสดงระยะห่าง [OFF]")
+end)
+
+Btn7_Alert.MouseButton1Click:Connect(function()
+    alertEnabled = not alertEnabled
+    toggle(Btn7_Alert, alertEnabled, "3. แจ้งเตือนคนใกล้ [ON]", "3. แจ้งเตือนคนใกล้ [OFF]")
+end)
+
+Btn4b_AlertRange.FocusLost:Connect(function()
+    local num = tonumber(Btn4b_AlertRange.Text)
+    if num then alertRange = math.clamp(math.floor(num), 1, 1000) end
+    Btn4b_AlertRange.Text = tostring(alertRange)
+end)
+
+Btn9_FriendOnly.MouseButton1Click:Connect(function()
+    friendOnly = not friendOnly
+    toggle(Btn9_FriendOnly, friendOnly, "4. แสดงเฉพาะเพื่อน [ON]", "4. แสดงเฉพาะเพื่อน [OFF]")
+    if not friendOnly then return end
+    for playerName, d in pairs(blips) do
+        d.frame:Destroy()
+        blips[playerName] = nil
+    end
+end)
+
+Btn10_AlertEnemy.MouseButton1Click:Connect(function()
+    alertEnemyOnly = not alertEnemyOnly
+    toggle(Btn10_AlertEnemy, alertEnemyOnly, "5. แจ้งเฉพาะต่างทีม [ON]", "5. แจ้งเฉพาะต่างทีม [OFF]")
+end)
+
+--// ==========================================
+--// [9] RENDER LOOP
+--// ==========================================
+RunService.RenderStepped:Connect(function()
+    if not isRadarUI_On or not isRadarSystem_On then return end
+
+    local now = os.clock()
+    if now - lastUpdate < UPDATE_RATE then return end
+    lastUpdate = now
+
+    local myChar = LocalPlayer.Character
+    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+
+    local cam = Workspace.CurrentCamera
+    local camLook = cam.CFrame.LookVector
+    local flatDir = Vector3.new(camLook.X, 0, camLook.Z)
+    if flatDir.Magnitude > 0.001 then
+        flatDir = flatDir.Unit
+    else
+        flatDir = Vector3.new(myHRP.CFrame.LookVector.X, 0, myHRP.CFrame.LookVector.Z).Unit
+    end
+
+    local referenceCFrame = CFrame.lookAt(myHRP.Position, myHRP.Position + flatDir)
+    local validPlayers = {}
+    local closestDist  = math.huge
+    local closestName  = ""
+    local closestColor = Color3.fromRGB(255, 50, 50)
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+
+        if friendCache[player.UserId] == nil then
+            local ok, result = pcall(function()
+                return LocalPlayer:IsFriendsWith(player.UserId)
+            end)
+            friendCache[player.UserId] = ok and result or false
+        end
+        local isFriend  = friendCache[player.UserId]
+        local isSameTeam = (player.Team ~= nil and player.Team == LocalPlayer.Team)
+
+        if friendOnly and not isFriend then continue end
+
+        local targetChar = player.Character
+        local targetHRP  = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+        local targetHum  = targetChar and targetChar:FindFirstChild("Humanoid")
+        if not (targetHRP and targetHum and targetHum.Health > 0) then continue end
+
+        local offset = referenceCFrame:ToObjectSpace(targetHRP.CFrame).Position
+        local dist2D = Vector2.new(offset.X, offset.Z).Magnitude
+        if dist2D > radarRadius then continue end
+
+        validPlayers[player.Name] = true
+
+        -- หาสีของผู้เล่นคนนี้
+        local playerColor
+        if isFriend then
+            playerColor = Color3.fromRGB(128, 0, 128)
+        elseif player.Team then
+            playerColor = player.TeamColor.Color
+        else
+            playerColor = Color3.fromRGB(255, 50, 50)
+        end
+
+        -- เช็คคนใกล้สุดสำหรับแจ้งเตือน
+        -- ถ้าเปิด alertEnemyOnly จะแจ้งเฉพาะต่างทีม
+        local shouldAlert = not alertEnemyOnly or not isSameTeam
+        if dist2D < closestDist and shouldAlert then
+            closestDist  = dist2D
+            closestName  = player.Name
+            closestColor = playerColor
+        end
+
+        -- blip
+        local blipData = blips[player.Name]
+        if not blipData then
+            local blip = Instance.new("Frame")
+            blip.AnchorPoint = Vector2.new(0.5, 0.5)
+            blip.ZIndex = 10
+            Instance.new("UICorner", blip).CornerRadius = UDim.new(1, 0)
+            blip.Parent = RadarScreen
+
+            local infoLabel = Instance.new("TextLabel", blip)
+            infoLabel.Size = UDim2.fromOffset(60, 28)
+            infoLabel.AnchorPoint = Vector2.new(0.5, 1)
+            infoLabel.Position = UDim2.new(0.5, 0, 0, -2)
+            infoLabel.BackgroundTransparency = 1
+            infoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            infoLabel.TextStrokeTransparency = 0
+            infoLabel.Font = Enum.Font.GothamBold
+            infoLabel.TextSize = 8
+            infoLabel.Text = ""
+            infoLabel.ZIndex = 11
+
+            local altLabel = Instance.new("TextLabel", blip)
+            altLabel.Size = UDim2.fromOffset(15, 12)
+            altLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+            altLabel.Position = UDim2.new(0.5, 0, 0.5, 8)
+            altLabel.BackgroundTransparency = 1
+            altLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            altLabel.TextStrokeTransparency = 0
+            altLabel.Font = Enum.Font.GothamBold
+            altLabel.TextSize = 9
+            altLabel.Text = ""
+            altLabel.ZIndex = 11
+
+            blipData = {frame = blip, info = infoLabel, alt = altLabel}
+            blips[player.Name] = blipData
+        end
+
+        local blip      = blipData.frame
+        local infoLabel = blipData.info
+        local altLabel  = blipData.alt
+
+        local scaleRatio = (radarRadius - 10) / (100000 - 10)
+        local blipSize   = math.clamp(8 - (scaleRatio * 6), 2, 8)
+        blip.Size = UDim2.fromOffset(blipSize, blipSize)
+        blip.BackgroundColor3 = playerColor
+
+        -- ลูกศรความสูง
+        local heightDiff = targetHRP.Position.Y - myHRP.Position.Y
+        if heightDiff > 10 then
+            altLabel.Text = "^"
+            altLabel.Position = UDim2.new(0.5, 0, 0.5, 8)
+        elseif heightDiff < -10 then
+            altLabel.Text = "v"
+            altLabel.Position = UDim2.new(0.5, 0, 0.5, 8)
+        else
+            altLabel.Text = ""
+        end
+
+        -- ชื่อ + ระยะ
+        local infoText = ""
+        if showName then infoText = player.Name end
+        if showDist then
+            local distText = math.floor(dist2D) .. "m"
+            infoText = infoText ~= "" and (infoText .. "\n" .. distText) or distText
+        end
+        infoLabel.Text = infoText
+
+        local uiRadius = RadarScreen.AbsoluteSize.X / 2
+        local scale    = uiRadius / radarRadius
+        blip.Position  = UDim2.fromOffset(
+            uiRadius + (offset.X * scale),
+            uiRadius + (offset.Z * scale)
+        )
+    end
+
+    -- ลบ blip เก่า
+    for playerName, blipData in pairs(blips) do
+        if not validPlayers[playerName] then
+            blipData.frame:Destroy()
+            blips[playerName] = nil
+        end
+    end
+
+    -- ✅ แจ้งเตือน พร้อมเปลี่ยนสีตามทีมของคนนั้น
+    if alertEnabled and closestDist <= alertRange then
+        local nowClock = os.clock()
+        if nowClock - alertCooldown > 3 then
+            alertCooldown = nowClock
+            AlertSound:Play()
+            AlertLabel.BackgroundColor3 = closestColor
+            AlertLabel.Text = "!! " .. closestName .. " เข้ามาใกล้ (" .. math.floor(closestDist) .. "m) !!"
+            AlertLabel.Visible = true
+            task.delay(2.5, function()
+                AlertLabel.Visible = false
+            end)
+        end
+    end
+end)
+
+--// ==========================================
+--// [10] ลากหน้าต่าง + ปุ่มปิด/เปิด
+--// ==========================================
+CloseBtn.MouseButton1Click:Connect(function()
+    Window.Visible = false
+    OpenBtn.Visible = true
+end)
+OpenBtn.MouseButton1Click:Connect(function()
+    Window.Visible = true
+    OpenBtn.Visible = false
+end)
+
+local function makeDraggable(frame, checkLock)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if checkLock and isRadarLocked then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            if checkLock and isRadarLocked then dragging = false return end
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+makeDraggable(Window, false)
+makeDraggable(RadarScreen, true)
