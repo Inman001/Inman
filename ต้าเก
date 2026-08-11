@@ -1,0 +1,135 @@
+--// ตัวแปรพื้นฐาน
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local SoundService = game:GetService("SoundService")
+
+local LocalPlayer = Players.LocalPlayer
+local UI_NAME = "PrivateRadarUI_Mobile"
+
+--// ลบ UI เก่า
+local OldUI = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild(UI_NAME)
+if OldUI then OldUI:Destroy() end
+print("[System] โหลดระบบเรดาร์สำเร็จ!")
+
+--// สร้าง ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = UI_NAME
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+--// ==========================================
+--// [1] MAIN WINDOW
+--// ==========================================
+local Window = Instance.new("Frame")
+Window.Name = "MainWindow"
+Window.Size = UDim2.fromOffset(260, 355)
+Window.Position = UDim2.fromOffset(50, 100)
+Window.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Window.Active = true
+Window.Parent = ScreenGui
+Instance.new("UICorner", Window).CornerRadius = UDim.new(0, 10)
+local UIStroke = Instance.new("UIStroke", Window)
+UIStroke.Thickness = 1.5
+UIStroke.Color = Color3.fromRGB(60, 60, 60)
+
+local TitleLabel = Instance.new("TextLabel", Window)
+TitleLabel.Size = UDim2.new(1, -40, 0, 25)
+TitleLabel.Position = UDim2.new(0, 10, 0, 2)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Radar Control Panel"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 16
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton", Window)
+CloseBtn.Size = UDim2.new(0, 25, 0, 25)
+CloseBtn.Position = UDim2.new(1, -30, 0, 2)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 12
+
+local PageLabel = Instance.new("TextLabel", Window)
+PageLabel.Size = UDim2.new(1, 0, 0, 16)
+PageLabel.Position = UDim2.new(0, 0, 0, 28)
+PageLabel.BackgroundTransparency = 1
+PageLabel.Text = "หน้า 1 / 2"
+PageLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+PageLabel.Font = Enum.Font.GothamBold
+PageLabel.TextSize = 11
+PageLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+--// ==========================================
+--// [2] OPEN BUTTON
+--// ==========================================
+local OpenBtn = Instance.new("TextButton", ScreenGui)
+OpenBtn.Size = UDim2.fromOffset(130, 22)
+OpenBtn.Position = UDim2.new(1, -390, 0, 8)
+OpenBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+OpenBtn.BackgroundTransparency = 0.6
+OpenBtn.Font = Enum.Font.GothamBold
+OpenBtn.Text = "ต้าสุดปอด"
+OpenBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+OpenBtn.TextSize = 12
+OpenBtn.Visible = false
+Instance.new("UICorner", OpenBtn).CornerRadius = UDim.new(0, 6)
+
+--// ==========================================
+--// [3] จอเรดาร์
+--// ==========================================
+local RadarScreen = Instance.new("Frame")
+RadarScreen.Name = "RadarScreen"
+RadarScreen.Size = UDim2.fromOffset(180, 180)
+RadarScreen.Position = UDim2.fromOffset(350, 100)
+RadarScreen.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+RadarScreen.BackgroundTransparency = 0.8
+RadarScreen.Visible = false
+RadarScreen.Active = true
+RadarScreen.ZIndex = 10
+RadarScreen.Parent = ScreenGui
+Instance.new("UICorner", RadarScreen).CornerRadius = UDim.new(1, 0)
+local RadarStroke = Instance.new("UIStroke", RadarScreen)
+RadarStroke.Thickness = 2
+RadarStroke.Color = Color3.fromRGB(150, 150, 150)
+RadarStroke.Transparency = 0.5
+
+local CenterDot = Instance.new("Frame", RadarScreen)
+CenterDot.Size = UDim2.fromOffset(6, 6)
+CenterDot.AnchorPoint = Vector2.new(0.5, 0.5)
+CenterDot.Position = UDim2.fromScale(0.5, 0.5)
+CenterDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+CenterDot.ZIndex = 10
+Instance.new("UICorner", CenterDot).CornerRadius = UDim.new(1, 0)
+
+local ForwardMarker = Instance.new("Frame", RadarScreen)
+ForwardMarker.Size = UDim2.fromOffset(4, 10)
+ForwardMarker.AnchorPoint = Vector2.new(0.5, 0)
+ForwardMarker.Position = UDim2.fromScale(0.5, 0)
+ForwardMarker.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ForwardMarker.BackgroundTransparency = 0.5
+ForwardMarker.ZIndex = 10
+
+--// ==========================================
+--// [4] helper
+--// ==========================================
+local function makeBtn(parent, posY, color, text)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, -20, 0, 32)
+    btn.Position = UDim2.new(0, 10, 0, posY)
+    btn.BackgroundColor3 = color
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+    return btn
+end
+
+local function makeTextBox(parent, posY, defaultText, placeholder)
+    local box = Instance.new("TextBox", parent)
+    box.Size = UDim2.new(1, 
