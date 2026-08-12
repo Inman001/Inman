@@ -1,0 +1,415 @@
+--// ==========================================
+--// FREE & FREEZE CAMERA SYSTEM (PC & MOBILE)
+--// ==========================================
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+local UI_NAME = "FreecamSystem_UI"
+
+-- [ระบบลบ UI เก่าเมื่อรันใหม่]
+local OldUI = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild(UI_NAME)
+if OldUI then OldUI:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = UI_NAME
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+--// ==========================================
+--// [1] ตัวแปรระบบ Camera
+--// ==========================================
+local freecamEnabled   = false
+local freezeCamEnabled = false
+
+local camMoveSpeed     = 5.0    -- ความเร็วเคลื่อนที่ (0 - 1000)
+local camTurnSpeed     = 180    -- ความเร็วหันหน้าจอ (70 - 500) ค่าเริ่มต้น 180
+
+local rotX, rotY       = 0, 0      
+local camCFrame        = CFrame.new()
+local freezeCFrame     = CFrame.new()
+local keysPressed      = {W=0, S=0, A=0, D=0, Q=0, E=0}
+
+-- ตัวแปรล็อก Touch หมุนกล้องบนมือถือ
+local cameraTouchObject = nil
+local isDraggingMouse   = false
+local lastTouchPos      = Vector2.new()
+
+--// ==========================================
+--// [2] สร้างปุ่มย่อ/เปิด (รูปกล้อง 📷)
+--// ==========================================
+local ToggleIconBtn = Instance.new("TextButton", ScreenGui)
+ToggleIconBtn.Size = UDim2.fromOffset(45, 45)
+ToggleIconBtn.Position = UDim2.new(0, 60, 0.35, -50)
+ToggleIconBtn.BackgroundTransparency = 0.3
+ToggleIconBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+ToggleIconBtn.Text = "📷"
+ToggleIconBtn.TextSize = 22
+ToggleIconBtn.Visible = false
+ToggleIconBtn.Active = true
+Instance.new("UICorner", ToggleIconBtn).CornerRadius = UDim.new(0, 10)
+local IconStroke = Instance.new("UIStroke", ToggleIconBtn)
+IconStroke.Thickness = 1.5
+IconStroke.Color = Color3.fromRGB(100, 100, 100)
+
+--// ==========================================
+--// [3] หน้าต่าง UI หลัก (ขยายขนาด 210x130)
+--// ==========================================
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.fromOffset(210, 130) 
+MainFrame.Position = UDim2.new(0, 60, 0.35, -50)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainFrame.Active = true
+
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+local Stroke = Instance.new("UIStroke", MainFrame)
+Stroke.Thickness = 1.5
+Stroke.Color = Color3.fromRGB(70, 70, 70)
+
+-- ปุ่มปิด ❌
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.fromOffset(25, 25)
+CloseBtn.Position = UDim2.new(1, -28, 0, 4)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "❌"
+CloseBtn.TextSize = 12
+CloseBtn.Font = Enum.Font.GothamBold
+
+-- เมื่อกดปิด UI -> ย้ายปุ่ม 📷 มาตำแหน่งปัจจุบันของ UI แล้วซ่อน UI หลัก
+CloseBtn.MouseButton1Click:Connect(function()
+    ToggleIconBtn.Position = MainFrame.Position
+    MainFrame.Visible = false
+    ToggleIconBtn.Visible = true
+end)
+
+--// ==========================================
+--// [4] ฝั่งซ้าย: ปรับความเร็วเดิน + ความเร็วหัน
+--// ==========================================
+-- ช่องที่ 1: ความเร็วเดิน (0 - 1000)
+local MoveSpeedLabel = Instance.new("TextLabel", MainFrame)
+MoveSpeedLabel.Size = UDim2.new(0, 85, 0, 15)
+MoveSpeedLabel.Position = UDim2.new(0, 8, 0, 12)
+MoveSpeedLabel.BackgroundTransparency = 1
+MoveSpeedLabel.Text = "ความเร็ว (0-1000):"
+MoveSpeedLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+MoveSpeedLabel.Font = Enum.Font.Gotham
+MoveSpeedLabel.TextSize = 9
+MoveSpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local MoveSpeedBox = Instance.new("TextBox", MainFrame)
+MoveSpeedBox.Size = UDim2.new(0, 85, 0, 28)
+MoveSpeedBox.Position = UDim2.new(0, 8, 0, 28)
+MoveSpeedBox.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+MoveSpeedBox.Text = tostring(camMoveSpeed)
+MoveSpeedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+MoveSpeedBox.Font = Enum.Font.GothamBold
+MoveSpeedBox.TextSize = 12
+Instance.new("UICorner", MoveSpeedBox).CornerRadius = UDim.new(0, 5)
+
+MoveSpeedBox.FocusLost:Connect(function()
+    local num = tonumber(MoveSpeedBox.Text)
+    if num then
+        camMoveSpeed = math.clamp(num, 0, 1000)
+    end
+    MoveSpeedBox.Text = tostring(camMoveSpeed)
+end)
+
+-- ช่องที่ 2: ความเร็วหันหน้าจอ (70 - 500) ค่าเริ่มต้น 180
+local TurnSpeedLabel = Instance.new("TextLabel", MainFrame)
+TurnSpeedLabel.Size = UDim2.new(0, 85, 0, 15)
+TurnSpeedLabel.Position = UDim2.new(0, 8, 0, 62)
+TurnSpeedLabel.BackgroundTransparency = 1
+TurnSpeedLabel.Text = "ความเร็วหัน (70-500):"
+TurnSpeedLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+TurnSpeedLabel.Font = Enum.Font.Gotham
+TurnSpeedLabel.TextSize = 9
+TurnSpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local TurnSpeedBox = Instance.new("TextBox", MainFrame)
+TurnSpeedBox.Size = UDim2.new(0, 85, 0, 28)
+TurnSpeedBox.Position = UDim2.new(0, 8, 0, 78)
+TurnSpeedBox.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+TurnSpeedBox.Text = tostring(camTurnSpeed)
+TurnSpeedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TurnSpeedBox.Font = Enum.Font.GothamBold
+TurnSpeedBox.TextSize = 12
+Instance.new("UICorner", TurnSpeedBox).CornerRadius = UDim.new(0, 5)
+
+TurnSpeedBox.FocusLost:Connect(function()
+    local num = tonumber(TurnSpeedBox.Text)
+    if num then
+        camTurnSpeed = math.clamp(num, 70, 500)
+    end
+    TurnSpeedBox.Text = tostring(camTurnSpeed)
+end)
+
+--// ==========================================
+--// [5] ฝั่งขวา: ปุ่ม FreeCam & ปุ่ม FreezeCam
+--// ==========================================
+local FreecamBtn = Instance.new("TextButton", MainFrame)
+FreecamBtn.Size = UDim2.new(0, 48, 0, 78)
+FreecamBtn.Position = UDim2.new(0, 102, 0, 28)
+FreecamBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+FreecamBtn.Text = "FreeCam\n[OFF]"
+FreecamBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FreecamBtn.Font = Enum.Font.GothamBold
+FreecamBtn.TextSize = 11
+Instance.new("UICorner", FreecamBtn).CornerRadius = UDim.new(0, 6)
+
+local FreezeBtn = Instance.new("TextButton", MainFrame)
+FreezeBtn.Size = UDim2.new(0, 48, 0, 78)
+FreezeBtn.Position = UDim2.new(0, 154, 0, 28)
+FreezeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+FreezeBtn.Text = "Freeze\n[OFF]"
+FreezeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FreezeBtn.Font = Enum.Font.GothamBold
+FreezeBtn.TextSize = 11
+Instance.new("UICorner", FreezeBtn).CornerRadius = UDim.new(0, 6)
+
+local function resetCameraToNormal()
+    Camera.CameraType = Enum.CameraType.Custom
+    local char = LocalPlayer.Character
+    if char then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if humanoid then Camera.CameraSubject = humanoid end
+        if hrp then hrp.Anchored = false end
+    end
+end
+
+local function toggleFreecam(state)
+    freecamEnabled = state
+    FreecamBtn.BackgroundColor3 = freecamEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+    FreecamBtn.Text = freecamEnabled and "FreeCam\n[ON]" or "FreeCam\n[OFF]"
+
+    local char = LocalPlayer.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+
+    if freecamEnabled then
+        if freezeCamEnabled then
+            freezeCamEnabled = false
+            FreezeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            FreezeBtn.Text = "Freeze\n[OFF]"
+        end
+
+        camCFrame = Camera.CFrame
+        local x, y, _ = camCFrame:ToOrientation()
+        rotX, rotY = x, y
+
+        Camera.CameraType = Enum.CameraType.Scriptable
+        if hrp then hrp.Anchored = true end
+    else
+        resetCameraToNormal()
+    end
+    
+    cameraTouchObject = nil
+    isDraggingMouse = false
+end
+
+local function toggleFreezeCam(state)
+    freezeCamEnabled = state
+    FreezeBtn.BackgroundColor3 = freezeCamEnabled and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(200, 50, 50)
+    FreezeBtn.Text = freezeCamEnabled and "Freeze\n[ON]" or "Freeze\n[OFF]"
+
+    local char = LocalPlayer.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+
+    if freezeCamEnabled then
+        if freecamEnabled then
+            freecamEnabled = false
+            FreecamBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            FreecamBtn.Text = "FreeCam\n[OFF]"
+        end
+
+        freezeCFrame = Camera.CFrame
+        Camera.CameraType = Enum.CameraType.Scriptable
+        if hrp then hrp.Anchored = false end
+    else
+        resetCameraToNormal()
+    end
+
+    cameraTouchObject = nil
+    isDraggingMouse = false
+end
+
+FreecamBtn.MouseButton1Click:Connect(function()
+    toggleFreecam(not freecamEnabled)
+end)
+
+FreezeBtn.MouseButton1Click:Connect(function()
+    toggleFreezeCam(not freezeCamEnabled)
+end)
+
+--// ==========================================
+--// [6] ระบบ INPUT
+--// ==========================================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if not freecamEnabled then return end
+
+    if input.UserInputType == Enum.UserInputType.Touch then
+        if input.Position.X > Camera.ViewportSize.X * 0.25 then
+            cameraTouchObject = input
+            lastTouchPos = Vector2.new(input.Position.X, input.Position.Y)
+        end
+    elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+        isDraggingMouse = true
+    end
+
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local code = input.KeyCode
+        if code == Enum.KeyCode.W then keysPressed.W = -1 end
+        if code == Enum.KeyCode.S then keysPressed.S = 1 end
+        if code == Enum.KeyCode.A then keysPressed.A = -1 end
+        if code == Enum.KeyCode.D then keysPressed.D = 1 end
+        if code == Enum.KeyCode.E then keysPressed.E = 1 end
+        if code == Enum.KeyCode.Q then keysPressed.Q = -1 end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input == cameraTouchObject then cameraTouchObject = nil end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then isDraggingMouse = false end
+
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local code = input.KeyCode
+        if code == Enum.KeyCode.W then keysPressed.W = 0 end
+        if code == Enum.KeyCode.S then keysPressed.S = 0 end
+        if code == Enum.KeyCode.A then keysPressed.A = 0 end
+        if code == Enum.KeyCode.D then keysPressed.D = 0 end
+        if code == Enum.KeyCode.E then keysPressed.E = 0 end
+        if code == Enum.KeyCode.Q then keysPressed.Q = 0 end
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not freecamEnabled then return end
+
+    local sensitivity = (camTurnSpeed / 20000)
+
+    if input.UserInputType == Enum.UserInputType.Touch and input == cameraTouchObject then
+        local currentPos = Vector2.new(input.Position.X, input.Position.Y)
+        local delta = currentPos - lastTouchPos
+        lastTouchPos = currentPos
+
+        rotY = rotY - (delta.X * sensitivity)
+        rotX = math.clamp(rotX - (delta.Y * sensitivity), -math.rad(89), math.rad(89))
+
+    elseif input.UserInputType == Enum.UserInputType.MouseMovement and isDraggingMouse then
+        local delta = input.Delta
+        rotY = rotY - (delta.X * sensitivity)
+        rotX = math.clamp(rotX - (delta.Y * sensitivity), -math.rad(89), math.rad(89))
+    end
+end)
+
+--// ==========================================
+--// [7] RENDER LOOP
+--// ==========================================
+RunService.RenderStepped:Connect(function(dt)
+    if freecamEnabled then
+        local rotCFrame = CFrame.Angles(0, rotY, 0) * CFrame.Angles(rotX, 0, 0)
+        local moveVector = Vector3.zero
+
+        local char = LocalPlayer.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+        if humanoid and humanoid.MoveDirection.Magnitude > 0 then
+            local flatLook = Vector3.new(rotCFrame.LookVector.X, 0, rotCFrame.LookVector.Z).Unit
+            local flatRight = Vector3.new(rotCFrame.RightVector.X, 0, rotCFrame.RightVector.Z).Unit
+            local fwdInput = humanoid.MoveDirection:Dot(flatLook)
+            local rightInput = humanoid.MoveDirection:Dot(flatRight)
+            moveVector = (rotCFrame.LookVector * fwdInput) + (rotCFrame.RightVector * rightInput)
+        else
+            local kbX = keysPressed.A + keysPressed.D
+            local kbZ = keysPressed.W + keysPressed.S
+            if kbX ~= 0 or kbZ ~= 0 then
+                local kbDir = Vector3.new(kbX, 0, kbZ).Unit
+                moveVector = rotCFrame:VectorToWorldSpace(kbDir)
+            end
+        end
+
+        local upDown = keysPressed.E + keysPressed.Q
+        local verticalMove = Vector3.new(0, upDown, 0)
+
+        local deltaPos = (moveVector + verticalMove) * (camMoveSpeed * 15 * dt)
+        camCFrame = CFrame.new(camCFrame.Position + deltaPos) * rotCFrame
+        Camera.CFrame = camCFrame
+
+    elseif freezeCamEnabled then
+        Camera.CFrame = freezeCFrame
+    end
+end)
+
+--// ==========================================
+--// [8] ระบบลากย้ายหน้าต่าง UI และ ปุ่ม 📷 (แยกจากกันอิสระ)
+--// ==========================================
+-- 8.1 ระบบลากย้าย MainFrame
+local function makeMainFrameDraggable(obj)
+    local dragging, dragStart, startPos
+    obj.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = obj.Position
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            obj.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+-- 8.2 ระบบแยก "ลาก" และ "คลิก" ของปุ่ม 📷
+local function setupIconBtnDragAndClick(btn)
+    local dragging = false
+    local hasMoved = false
+    local dragStart, startPos
+
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            hasMoved = false
+            dragStart = input.Position
+            startPos = btn.Position
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 6 then
+                hasMoved = true -- หากเลื่อนเกิน 6 พิกเซลจะถือว่าเป็นการ "ลากย้าย" ไม่ใช่การแตะเปิด
+            end
+            if hasMoved then
+                btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                dragging = false
+                -- ถ้าไม่ได้ลากย้าย ให้ถือเป็นการ "คลิก/แตะ" เพื่อเปิด UI ตรงตำแหน่งปัจจุบันของ 📷
+                if not hasMoved then
+                    MainFrame.Position = btn.Position
+                    btn.Visible = false
+                    MainFrame.Visible = true
+                end
+            end
+        end
+    end)
+end
+
+makeMainFrameDraggable(MainFrame)
+setupIconBtnDragAndClick(ToggleIconBtn)
